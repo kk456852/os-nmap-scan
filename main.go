@@ -36,8 +36,32 @@ const (
 	DIST_METHOD_TRACEROUTE
 )
 
-func os_scan_ipv4() {
+func os_scan_ipv4(target *Target) bool {
+	HostOsScanInfo := &HostOsScanInfo{}
+	var OSI *OsScanInfo
+	if target != nil {
+		OSI, err := newOsScanInfo(target)
+		if err != nil {
+			return false
+		}
+		return true
+	}
+	return false
+}
 
+type HostOsScanInfo struct {
+	target *Target
+	FPR    *FingerPrintResultsIPv4
+	OSI    *OsScanInfo
+}
+
+type OsScanInfo struct {
+	starttime         float64
+	numInitialTargets uint32
+}
+
+type FingerPrintResultsIPv4 struct {
+	numFPs int
 }
 
 type state_reason_t struct {
@@ -105,6 +129,10 @@ type HostOsScanStats struct {
 	TOpsReplyNum                              int
 	storedIcmpReply                           int
 	upi                                       udpprobeinfo
+}
+
+func newOsScanInfo(target *Target) (*OsScanInfo, error) {
+	return &OsScanInfo{}, nil
 }
 
 func (s *HostOsScanStats) addNewProbe(probeType OFProbeType, i int) {
