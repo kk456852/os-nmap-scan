@@ -5,14 +5,19 @@ import (
 	"math/rand"
 	"net"
 	"time"
-
-	_ "github.com/google/gopacket"
+	"github.com/spf13/viper"
 	"github.com/google/gopacket/pcap"
 )
 
 const NUM_SEQ_SAMPLES = 6
 const NUM_FPTESTS = 13
 const MAX_FP_RESULTS = 36
+
+const (
+	OP_FAILURE = -1
+	OP_SUCCESS = 0
+)
+
 
 type OFProbeType uint32
 
@@ -36,17 +41,60 @@ const (
 	DIST_METHOD_TRACEROUTE
 )
 
-func os_scan_ipv4(target *Target) bool {
-	HostOsScanInfo := &HostOsScanInfo{}
-	var OSI *OsScanInfo
-	if target != nil {
-		OSI, err := newOsScanInfo(target)
-		if err != nil {
-			return false
-		}
-		return true
+var c *Config
+var perf scan_performance_vars
+
+type Config struct {
+	NmapOs     NmapOs
+}
+
+type NmapOs struct {
+	min_parallelism int
+	max_parallelism int
+	db_path         string
+	host_timeout    uint64
+}
+
+type scan_performance_vars struct {
+	low_cwnd int
+	host_initial_cwnd int
+	group_initial_cwnd int
+	max_cwnd int
+	slow_incr int
+	ca_incr int
+	cc_scale_max int
+	initial_ssthresh int
+	group_drop_cwnd_divisor float64
+	group_drop_ssthresh_divisor float64
+	host_drop_ssthresh_divisor float64
+}
+
+func (s *scan_performance_vars) init(){
+	var maxOpInt int
+	if c.NmapOs.min_parallelism != 0 {
+		s.low_cwnd = c.NmapOs.min_parallelism
+	}else {
+		s.low_cwnd = 1
 	}
-	return false
+	if c.NmapOs.max_parallelism != 0 {
+		maxOpInt = c.NmapOs.max_parallelism
+	}else {
+		maxOpInt = 300
+	}
+	if s.max_cwnd > maxOpInt{
+		s.max_cwnd = maxOpInt
+	}
+}
+
+func os_scan_ipv4(Targets []*Target) int {
+	var itry int
+	var unMatchedHosts []*HostOsScanInfo
+	perf.init()
+	OSI, err := newOsScanInfo(Targets)
+	if err != nil  || len(Targets) == 0 || OSI.numIncompleteHosts() == 0{
+		return OP_FAILURE
+	}
+	OSI.starttime =
 }
 
 type HostOsScanInfo struct {
@@ -58,6 +106,11 @@ type HostOsScanInfo struct {
 type OsScanInfo struct {
 	starttime         float64
 	numInitialTargets uint32
+	incompleteHosts   []*HostOsScanInfo
+}
+
+func (i *OsScanInfo) numIncompleteHosts() int {
+	return len(i.incompleteHosts)
 }
 
 type FingerPrintResultsIPv4 struct {
@@ -69,13 +122,6 @@ type state_reason_t struct {
 	ttl       uint16
 }
 
-type Target struct {
-	seq                         seq_info
-	distance                    int
-	distance_calculation_method dist_calc_method
-	FPR                         FingerPrintResults
-	reason                      state_reason_t
-}
 
 type FingerPrintResults struct {
 	num_perfect_matches         int
@@ -131,8 +177,20 @@ type HostOsScanStats struct {
 	upi                                       udpprobeinfo
 }
 
-func newOsScanInfo(target *Target) (*OsScanInfo, error) {
-	return &OsScanInfo{}, nil
+func newOsScanInfo(targets []*Target) (*OsScanInfo, error) {
+	OSI :=  &OsScanInfo{}
+	var targetno uint16
+	var hsi *HostOsScanInfo
+	num_timedout := 0
+	OSI.numInitialTargets = 0
+	for i:=0; i<len(targets);i++ {
+		if targets[i].timedOut(time.Now()){
+			num_timedout++
+			continue
+		}
+	}
+	OSI.nextTarget =
+	return OSI, nil
 }
 
 func (s *HostOsScanStats) addNewProbe(probeType OFProbeType, i int) {
@@ -293,7 +351,17 @@ func get_random_u32() uint32 {
 }
 
 func main() {
-	os_scan_ipv4()
+	v := viper.New()
+	v.SetConfigFile("./config.yaml")
+	v.SetConfigType("yaml")
+	if err1 := v.ReadInConfig(); err1 != nil {
+		return
+	}
+	c.NmapOs.max_parallelism = v.GetInt("NmapOs.max_parallelism")
+	c.NmapOs.min_parallelism = v.GetInt("NmapOS.min_parallelism")
+	c.NmapOs.db_path         = v.GetString("NmapOS.db_path")
+
+
 }
 
 func getTargetOsFingerPrint(target net.IPAddr) string {

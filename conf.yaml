@@ -1,0 +1,5 @@
+NmapOs:
+  min_parallelism: 12
+  max_parallelism: 34
+  db_path        : "/Users/tankuikui/nmap/nmap-os-db"
+  host_timeout   : 21
